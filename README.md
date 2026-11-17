@@ -1,82 +1,79 @@
 # TVBox 成人站接口合集（自托管版）
 
-把分散在多个来源里的成人站 TVBox 接口，合并成**一份可直接上传 GitHub 的自托管配置**。
-上传后，TVBox 的接口内容全部从你自己的仓库 `raw.githubusercontent.com` 拉取，不再依赖第三方服务器。
+把分散在多个来源里的成人站 TVBox 接口合并成**一份可直接上传 GitHub 的配置**，并做了**连通性筛选**，只保留真正能连上的站。
 
----
+## 一、文件说明
 
-## 一、目录结构
+| 文件 | 说明 |
+|---|---|
+| `box.json` | **主配置（47 站，已筛选可用）** ★ TVBox 填这个地址 |
+| `box.full.json` | 全量备份（132 站，未筛选），供对照/回滚 |
+| `spiders/` | 4 个 csp 站引用的 5 个本地文件（自托管） |
+| `sources/` | 3 份原始来源配置（留档，供排查） |
+| `finalize.py` | 合并/去重/校验脚本（可复现全量配置） |
 
-```
-tvbox-interfaces/
-├── box.json            ← 主配置（自托管，相对路径 ./spiders/...）★ 上传这个
-├── box-remote.json     ← 同 132 站，但用绝对 URL（不上传也能直接用）
-├── spiders/            ← 4 个 csp 站引用的本地文件（共 5 个）
-│   ├── hanime1_direct.py
-│   ├── gm.jar
-│   ├── 123av.user.js
-│   ├── missav.user.js
-│   └── hanime1.user.js
-├── sources/            ← 原始来源配置（留档，供排查）
-│   ├── 18cn.json
-│   ├── R18.json
-│   └── wtc1069-hanime1-missav-box.json
-├── finalize.py         ← 合并/去重/校验脚本（可复现本配置）
-└── README.md
-```
+## 二、站点统计
 
-## 二、站点统计（box.json）
+### box.json（已筛选，47 站）
 
 | 类型 | 说明 | 数量 |
 |---|---|---|
-| type 1 | `api.php/provide/vod/` 采集接口（远端 API） | 72 |
-| type 0 | 通用采集接口（远端 API） | 56 |
+| type 1 | `api.php/provide/vod/` 采集接口（远端 API） | 20 |
+| type 0 | 通用采集接口（远端 API） | 23 |
 | type 3 | csp 爬虫（本地 `spiders/` 文件） | 4 |
-| **合计** | | **132** |
+| **合计** | | **47** |
 
-4 个 csp 站及其本地文件（均已随包提供，上传后即可用）：
+### box.full.json（全量，132 站）
 
-| 站 key | 引用的本地文件 |
+| 类型 | 数量 |
 |---|---|
-| `hanime1_direct.py` | `./spiders/hanime1_direct.py` |
-| `Hanime1` | `./spiders/gm.jar` + `./spiders/hanime1.user.js` |
-| `MissAV` | `./spiders/gm.jar` + `./spiders/missav.user.js` |
-| `123av` | `./spiders/gm.jar` + `./spiders/123av.user.js` |
+| type 1 | 72 |
+| type 0 | 56 |
+| type 3 | 4 |
+| **合计** | **132** |
 
-> 顶层还保留了 `parses`（解析）、`flags`、`ijk`、`ads`、`lives`（1 个可正常工作的远端直播源）等 TVBox 常用设置，均自包含、无本地文件依赖。
+4 个 csp 站及其本地文件（均已随包提供）：
 
-## 三、合并与去重说明
+| 站 | 本地文件 |
+|---|---|
+| hanime1_direct | `spiders/hanime1_direct.py` |
+| csp_GM（3 个：MissAV 等） | `spiders/gm.jar` + 对应油猴脚本 |
 
-- **来源**：`18cn.json`（46 站）、`R18.json`（101 站）、`wtc1069-hanime1-missav-box.json`（4 站）。
-- **去重**：按 `key` 去重，合并后 134 站。
-- **剔除 2 个 18cn csp 站**（`转点`、`csp_xBPQ_公子福利`）：
-  - 二者都指向 123AV，而 `123av`（`123av.user.js`）站已完整覆盖 123AV，功能重复；
-  - 且它们依赖 `./lib/apiv2542直转点.js`、`./lib/直转点.txt`、`./lib/xBPQ.jar` 三个文件，原 18cn 主机已无法访问（探测均 502/404），无法随包提供。
-  - 剔除后 **132 站，全部 csp 引用都能在本仓库内解析，零悬空引用**。
-- **剔除 1 个直播源**：`lives` 里引用 `./lib/RTV.txt` 的直播列表（文件同样拿不到），保留另一个可正常工作的远端直播代理。
+## 三、连通性筛选说明（132 → 47）
+
+对 128 个远端站（type 0/1）逐个请求测连通性，**只保留返回有效数据的 43 个**，剔除 85 个连不上的。type 3 的 4 个本地 csp 站全部保留。
+
+剔除的 85 站失败原因分布：
+
+| 原因 | 数量 | 说明 |
+|---|---|---|
+| DNS 解析失败 | ~41 | 域名已失效或被地域封锁 |
+| 连接超时 | ~12 | 服务器无响应 |
+| 连接被重置/关闭 | ~10 | 对方拒绝/中断连接 |
+| 有响应但无视频数据 | 5 | 接口格式不符，TVBox 用不了 |
+| HTTP 404 / 401 | ~6 | 接口路径失效 / 需鉴权 |
+| 其他（SSL/网络不可达等） | ~11 | 各类网络层错误 |
+
+> **注意**：筛选在当前测试环境完成，环境带系统代理且部分 DNS 受限。绝大多数剔除站是 DNS 失败/超时/连接重置（站点本身已死或地域封锁），但**个别站可能在你本机直连下可用**。如需更全，可用 `box.full.json` 在 TVBox 里自行实测。
 
 ## 四、上传到你的 GitHub
 
-1. 新建一个仓库（如 `tvbox`），把本目录内容全部上传：
-   ```
-   box.json  box-remote.json  README.md  finalize.py
-   spiders/  sources/
-   ```
-2. 打开仓库 → **Settings → General → 确认 Public**（TVBox 需能匿名访问 raw 文件）。
-3. 你的接口地址就是：
-   ```
-   https://raw.githubusercontent.com/<你的用户名>/tvbox/main/box.json
-   ```
-   （分支名按实际改，默认 `main`。）
-4. 把该地址填进 TVBox / 影视仓 的「配置地址」即可，接口内容从此只从你的仓库拉取。
+仓库已建好：`bogege123/tvbox-interfaces`（私有）。
+
+接口地址（TVBox 填这个）：
+```
+https://raw.githubusercontent.com/bogege123/tvbox-interfaces/main/box.json
+```
+
+> 仓库是**私有**的，TVBox 拉取需在地址里带 token，或用能访问私有仓库的方式。若希望免 token 直接拉，可把仓库改为公开。
 
 ## 五、TVBox 使用
 
-- **自托管（推荐）**：用上面的 `box.json` raw 地址。csp 站走 `./spiders/` 相对路径，自动指向你仓库里的文件。
-- **免上传直接用**：用 `box-remote.json`（csp 文件走 wtc1069 的 GitHub 绝对地址），无需上传，但依赖第三方服务器。
+- 把上面的 `box.json` 地址填进 TVBox / 影视仓的「配置地址」。
+- csp 站走 `./spiders/` 相对路径，自动指向仓库内文件，自包含、零悬空引用。
 
 ## 六、注意
 
-- type 0 / type 1 是**远端采集 API**，本身无法本地化，接口可用性取决于对方服务器是否在线；失效多为对方关停，可在 `sources/` 里对照原始配置排查。
+- type 0 / type 1 是**远端采集 API**，无法本地化，可用性取决于对方服务器是否在线；失效多为对方关停。
 - 只有 type 3 的 csp 文件能自托管（已放入 `spiders/`）。
-- 若日后找到 18cn 的 `./lib/` 三个文件，可补回 `转点`、`csp_xBPQ_公子福利` 两站（把文件放进 `spiders/` 并改相对路径即可）。
+- 若日后某远端站恢复，可从 `box.full.json` 里把对应站加回 `box.json`。
